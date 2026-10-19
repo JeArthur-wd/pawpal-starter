@@ -132,19 +132,33 @@ Still pending today (2026-10-19):
 ## 🧪 Testing PawPal+
 
 ```bash
-# Run the full test suite:
-pytest
-
-# Run with coverage:
-pytest --cov
+python -m pytest
 ```
 
-Sample test output:
+The 18 tests in `tests/test_pawpal.py` cover the logic layer in `pawpal_system.py`:
+
+- **Sorting:** `sort_by_time` returns tasks in chronological order with untimed tasks last.
+- **Filtering:** `filter_tasks` by pet name, by completion status, and both together.
+- **Recurrence:** completing a daily task adds a copy due the next day, a weekly one in seven days, and a one-off task creates nothing. The copy keeps the task's details, stays on the same pet, and is hidden until its due date. Completing the same task twice never creates a second copy.
+- **Conflicts:** `conflict_warnings` flags overlapping windows for the same pet and for different pets, including two tasks at the exact same time. Back-to-back and untimed tasks are not flagged, and an empty list of tasks doesn't crash.
+- **Planning:** all pets' tasks are combined, high priority gets the limited time budget first, tasks that don't fit the budget or the day window are skipped with a reason, an early preferred time moves to the start of the day, and the generated plan has no overlaps.
+- **Basics and empty cases:** marking a task complete changes its status, adding a task grows the pet's list, and pets with no tasks (or an owner with no pets) produce an empty plan.
 
 ```
-.........                                                                [100%]
-9 passed in 0.08s
+$ python -m pytest
+============================= test session starts =============================
+platform win32 -- Python 3.13.15, pytest-8.4.2, pluggy-1.6.0
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.15.1, cov-4.1.0
+collected 18 items
+
+tests\test_pawpal.py ..................                                  [100%]
+
+============================= 18 passed in 0.10s ==============================
 ```
+
+**Confidence level: 4 / 5 stars (★★★★☆).** The scheduling, sorting, recurrence and conflict rules are each checked on normal inputs and on edge cases, and writing the edge-case tests found a real bug (completing a recurring task twice created a duplicate), which is now fixed. I stop short of 5 because the Streamlit UI is only checked by hand, the tests don't cover tasks that cross midnight or two pets with the same name, and the scheduler is greedy rather than optimal.
 
 ## 📐 Smarter Scheduling
 

@@ -232,8 +232,11 @@ class Scheduler:
     def mark_task_complete(self, task: Task, on: date) -> Optional[Task]:
         """Complete a task and, if it recurs, add its next occurrence to the same pet.
 
-        Returns the newly created task, or None for a one-off task.
+        Returns the newly created task, or None for a one-off task or one that was
+        already completed (so completing twice never creates a duplicate).
         """
+        if task.last_completed is not None:
+            return None
         task.mark_complete(on)
         following = task.next_occurrence(on)
         if following is not None:

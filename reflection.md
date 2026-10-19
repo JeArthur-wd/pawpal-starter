@@ -24,6 +24,8 @@ Yes. After writing the class skeletons, I asked an AI assistant to review `pawpa
 
 I did not apply the other suggestions, which can wait. Those are a real `Task`-to-`Pet` reference instead of a name string, separating the task definition from one day's plan result, an `end_time` field, and reconciling `available_minutes` with the `day_start`/`day_end` window. I'll revisit them in Phase 6 if the implementation shows they matter. `diagrams/uml.mmd` is updated to match.
 
+**Later change (Phase 4): recurrence became instance-based.** Originally a recurring task was "due again" whenever `is_due()` compared `last_completed` with today, so the same object repeated forever. The Phase 4 requirement said completing a daily or weekly task should create a new instance, and doing both would have made a task reappear on the day it was finished. I replaced the date comparison with a `due_date` field: `Scheduler.mark_task_complete()` marks the task done and adds a copy from `Task.next_occurrence(on)` due `on` plus one day or seven. `is_due()` is now just "not completed and the due date has arrived". Completed tasks also stay in the pet's list as history, which makes the completed/pending filter meaningful.
+
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
@@ -35,8 +37,11 @@ I did not apply the other suggestions, which can wait. Those are a real `Task`-t
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+**Conflict detection checks overlapping windows, but only warns and only for timed tasks.** `Scheduler.conflict_warnings()` compares each task's requested window (preferred time plus duration), so a 30-minute walk at 07:30 conflicts with a task at 07:40, not just with one at exactly 07:30. It only returns a warning message, and `generate_plan` resolves clashes on its own by moving the later or lower-priority task to the next free slot. A task with no preferred time can never be flagged, because the scheduler picks its slot.
+
+I compare every pair of tasks with `itertools.combinations`, which is O(n^2), instead of sorting once and sweeping, which is O(n log n). The pairwise version is shorter, easier to read and obviously correct. A pet owner has a handful of tasks a day, so the speed difference is not measurable. I would switch to the sweep only if a plan could hold hundreds of tasks.
+
+The same readability-over-optimality choice shows up in `generate_plan`. It fills the time budget greedily in priority order, so one long high-priority task can crowd out several short ones that would have fit together. Greedy is easy to explain to the owner ("highest priority first"), which matters because the app is meant to justify its plan.
 
 ---
 

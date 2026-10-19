@@ -33,6 +33,62 @@ def print_schedule(owner: Owner, scheduler: Scheduler, today: date) -> None:
         print(f"  {task.title} ({task.pet_name}): {task.reason}")
 
 
+def print_tasks(tasks: list[Task]) -> None:
+    """Print one task per line as 'HH:MM  Title (Pet)'."""
+    for task in tasks:
+        when = task.preferred_time.strftime("%H:%M") if task.preferred_time else "--:--"
+        print(f"  {when}  {task.title} ({task.pet_name})")
+
+
+def demo_algorithms(today: date) -> None:
+    """Show sorting, filtering, conflict warnings and recurring tasks."""
+    owner = Owner("Jordan")
+    mochi = Pet("Mochi", "dog")
+    whiskers = Pet("Whiskers", "cat")
+    owner.add_pet(mochi)
+    owner.add_pet(whiskers)
+
+    # Added deliberately out of time order.
+    mochi.add_task(Task("Evening walk", 30, Priority.MEDIUM, time(18, 0), Frequency.DAILY))
+    whiskers.add_task(Task("Give medication", 5, Priority.HIGH, time(12, 30)))
+    mochi.add_task(Task("Morning walk", 30, Priority.HIGH, time(7, 30), Frequency.DAILY))
+    whiskers.add_task(Task("Breakfast", 10, Priority.HIGH, time(8, 30), Frequency.DAILY))
+    mochi.add_task(Task("Vet check-in call", 15, Priority.LOW, time(12, 30)))
+    mochi.add_task(Task("Brush teeth", 5, Priority.LOW, time(7, 40)))
+    whiskers.add_task(Task("Bath", 20, Priority.LOW, time(16, 0), Frequency.WEEKLY))
+    whiskers.add_task(Task("Play session", 20, Priority.MEDIUM))
+
+    scheduler = Scheduler(owner)
+    all_tasks = owner.get_all_tasks()
+
+    print("\n\n=== Sorting: tasks as entered ===")
+    print_tasks(all_tasks)
+    print("\n=== Sorting: Scheduler.sort_by_time() ===")
+    print_tasks(scheduler.sort_by_time(all_tasks))
+
+    print("\n=== Filtering: Scheduler.filter_tasks(pet_name='Mochi') ===")
+    print_tasks(scheduler.filter_tasks(pet_name="Mochi"))
+
+    print("\n=== Conflict detection: Scheduler.conflict_warnings() ===")
+    for warning in scheduler.conflict_warnings(today):
+        print(" ", warning)
+
+    print("\n=== Recurring tasks: Scheduler.mark_task_complete() ===")
+    for title in ("Morning walk", "Bath", "Give medication"):
+        task = next(t for t in all_tasks if t.title == title)
+        following = scheduler.mark_task_complete(task, today)
+        if following:
+            print(f"  Completed '{title}' ({task.frequency.value}) -> next due {following.due_date}")
+        else:
+            print(f"  Completed '{title}' (once) -> no next occurrence")
+
+    print("\n=== Filtering by status: completed=True / completed=False ===")
+    print("Completed:")
+    print_tasks(scheduler.filter_tasks(completed=True))
+    print(f"Still pending today ({today}):")
+    print_tasks([t for t in scheduler.filter_tasks(completed=False) if t.is_due(today)])
+
+
 def main() -> None:
     today = date.today()
 
@@ -52,6 +108,7 @@ def main() -> None:
     scheduler = Scheduler(owner)
     scheduler.generate_plan(today)
     print_schedule(owner, scheduler, today)
+    demo_algorithms(today)
 
 
 if __name__ == "__main__":

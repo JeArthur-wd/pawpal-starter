@@ -25,13 +25,14 @@ classDiagram
         +time preferred_time
         +Frequency frequency
         +date last_completed
+        +date due_date
         +str pet_name
         +time scheduled_start
         +str reason
         +mark_complete(on) void
         +is_due(date) bool
         +priority_value() int
-        +next_occurrence() Task
+        +next_occurrence(on) Task
     }
 
     class Scheduler {
@@ -40,6 +41,10 @@ classDiagram
         +list~Task~ skipped
         +generate_plan(date) list~Task~
         +sort_tasks(tasks) list~Task~
+        +sort_by_time(tasks) list~Task~
+        +filter_tasks(tasks, pet_name, completed) list~Task~
+        +mark_task_complete(task, on) Task
+        +conflict_warnings(on, tasks) list~str~
         +detect_conflicts() list~Task~
         +explain_plan() str
     }

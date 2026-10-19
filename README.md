@@ -26,7 +26,7 @@ Your final app should:
 
 The logic layer lives in `pawpal_system.py` and is built from four classes plus two enums (`Priority`, `Frequency`). The design is in `diagrams/uml.mmd`.
 
-- **`Task`** (dataclass) is one care activity: title, duration, priority, optional preferred time, frequency and the date it was last completed. `is_due(date)` uses frequency and `last_completed` to decide whether it belongs in a given day's plan.
+- **`Task`** (dataclass) is one care activity: title, duration, priority, optional preferred time, frequency and the date it was last completed. `is_due(date)` is true while the task is uncompleted and its optional `due_date` has arrived, which decides whether it belongs in a given day's plan.
 - **`Pet`** (dataclass) holds a name, species and its list of tasks. `add_task` also stamps the task with the pet's name so the plan can say who it is for.
 - **`Owner`** (dataclass) holds the constraints (time budget, day window, preferences) and a list of pets. `get_all_tasks()` returns every pet's tasks in one flat list.
 - **`Scheduler`** is the planning logic. `generate_plan(date)` reads from `Owner.get_all_tasks()`, keeps the tasks that are due, sorts them by priority, then preferred time, then shortest first, and places each in the earliest free slot at or after its preferred time. Tasks that don't fit the time budget or the day window are skipped, and every task records a `reason`. `detect_conflicts()` finds overlapping slots and `explain_plan()` turns the reasons into text.
@@ -79,6 +79,54 @@ Why this plan:
   Play session (Whiskers): medium priority, placed in the first free slot.
   Give medication (Whiskers): high priority, scheduled at its preferred time.
   Evening walk (Mochi): medium priority, scheduled at its preferred time.
+
+
+=== Sorting: tasks as entered ===
+  18:00  Evening walk (Mochi)
+  07:30  Morning walk (Mochi)
+  12:30  Vet check-in call (Mochi)
+  07:40  Brush teeth (Mochi)
+  12:30  Give medication (Whiskers)
+  08:30  Breakfast (Whiskers)
+  16:00  Bath (Whiskers)
+  --:--  Play session (Whiskers)
+
+=== Sorting: Scheduler.sort_by_time() ===
+  07:30  Morning walk (Mochi)
+  07:40  Brush teeth (Mochi)
+  08:30  Breakfast (Whiskers)
+  12:30  Vet check-in call (Mochi)
+  12:30  Give medication (Whiskers)
+  16:00  Bath (Whiskers)
+  18:00  Evening walk (Mochi)
+  --:--  Play session (Whiskers)
+
+=== Filtering: Scheduler.filter_tasks(pet_name='Mochi') ===
+  18:00  Evening walk (Mochi)
+  07:30  Morning walk (Mochi)
+  12:30  Vet check-in call (Mochi)
+  07:40  Brush teeth (Mochi)
+
+=== Conflict detection: Scheduler.conflict_warnings() ===
+  Warning: 'Morning walk' (Mochi, 07:30-08:00) overlaps 'Brush teeth' (Mochi, 07:40-07:45) [same pet]
+  Warning: 'Vet check-in call' (Mochi, 12:30-12:45) overlaps 'Give medication' (Whiskers, 12:30-12:35) [different pets]
+
+=== Recurring tasks: Scheduler.mark_task_complete() ===
+  Completed 'Morning walk' (daily) -> next due 2026-10-20
+  Completed 'Bath' (weekly) -> next due 2026-10-26
+  Completed 'Give medication' (once) -> no next occurrence
+
+=== Filtering by status: completed=True / completed=False ===
+Completed:
+  07:30  Morning walk (Mochi)
+  12:30  Give medication (Whiskers)
+  16:00  Bath (Whiskers)
+Still pending today (2026-10-19):
+  18:00  Evening walk (Mochi)
+  12:30  Vet check-in call (Mochi)
+  07:40  Brush teeth (Mochi)
+  08:30  Breakfast (Whiskers)
+  --:--  Play session (Whiskers)
 ```
 
 ## 🧪 Testing PawPal+
@@ -94,19 +142,25 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+.........                                                                [100%]
+9 passed in 0.08s
 ```
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
-
 | Feature | Method(s) | Notes |
 |---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Sort by priority | `Scheduler.sort_tasks()` | Priority first, then preferred time, then shortest first. Decides which tasks get the limited time budget. |
+| Sort by time | `Scheduler.sort_by_time()` | Chronological by scheduled start, else preferred time. Tasks with no time go last. Keys are `datetime.time` objects, so no string parsing is needed. |
+| Filter by pet or status | `Scheduler.filter_tasks()` | Optional `pet_name` and `completed` arguments that combine freely. Defaults to all of the owner's tasks across every pet. |
+| Time-budget filtering | `Scheduler.generate_plan()` | Skips a task when it needs more minutes than remain or no slot fits before the day ends, and records why. |
+| Conflict warnings | `Scheduler.conflict_warnings()` | Returns readable warning strings for overlapping time windows, for the same pet or different pets. Never raises. `Scheduler.detect_conflicts()` does the same check on the finished plan and returns the tasks. |
+| Recurring tasks | `Scheduler.mark_task_complete()`, `Task.next_occurrence()` | Completing a daily or weekly task adds a new copy to the same pet with `due_date` = completion date + 1 day (daily) or + 7 days (weekly). One-off tasks create nothing. `Task.is_due()` hides the new copy until its date. |
+
+**Design notes**
+- Conflict checks compare each task's window (start time plus duration), so a 30-minute walk at 07:30 conflicts with a task at 07:40. Back-to-back tasks (one ends exactly when the next starts) are not conflicts.
+- `generate_plan` never produces overlapping slots: it moves a later or lower-priority task to the next free slot. `conflict_warnings` is for telling the owner that the times they asked for clash.
+- Only tasks with a time can conflict, because tasks without a preferred time get their slot from the scheduler.
 
 ## 📸 Demo Walkthrough
 

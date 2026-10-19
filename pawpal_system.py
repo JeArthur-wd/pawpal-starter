@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time, timedelta
 from enum import Enum
+from itertools import combinations
 from typing import Optional
 
 # Plans never span days, so all time arithmetic is anchored to one arbitrary date.
 _ANCHOR = date(2000, 1, 1)
-_WEEK = timedelta(days=7)
 
 
 def _dt(t: time) -> datetime:
@@ -39,6 +39,7 @@ class Frequency(Enum):
 
 
 _PRIORITY_VALUES = {Priority.LOW: 1, Priority.MEDIUM: 2, Priority.HIGH: 3}
+_RECURRENCE_STEP = {Frequency.DAILY: timedelta(days=1), Frequency.WEEKLY: timedelta(days=7)}
 
 
 # eq=False: tasks compare by identity, so identical tasks for different pets stay distinct.
@@ -52,6 +53,7 @@ class Task:
     preferred_time: Optional[time] = None
     frequency: Frequency = Frequency.ONCE
     last_completed: Optional[date] = None
+    due_date: Optional[date] = None  # None = due whenever; set on recurring copies
     pet_name: str = ""  # stamped by Pet.add_task
     scheduled_start: Optional[time] = None
     reason: str = ""
@@ -61,24 +63,23 @@ class Task:
         self.last_completed = on
 
     def is_due(self, on: date) -> bool:
-        """Return True if the task should appear in the plan for the given date."""
-        if self.last_completed is None:
-            return True
-        if self.frequency is Frequency.ONCE:
+        """Return True if the task is not yet completed and its due date has arrived."""
+        if self.last_completed is not None:
             return False
-        if self.frequency is Frequency.DAILY:
-            return self.last_completed < on
-        return on - self.last_completed >= _WEEK
+        return self.due_date is None or self.due_date <= on
 
     def priority_value(self) -> int:
         """Map priority to a number for sorting (higher = more important)."""
         return _PRIORITY_VALUES[self.priority]
 
-    def next_occurrence(self) -> Optional[Task]:
-        """Return a fresh, uncompleted copy for the next occurrence, or None for one-off tasks."""
-        if self.frequency is Frequency.ONCE:
+    def next_occurrence(self, on: date) -> Optional[Task]:
+        """Return an uncompleted copy due one day (daily) or week (weekly) after `on`, else None."""
+        step = _RECURRENCE_STEP.get(self.frequency)
+        if step is None:
             return None
-        return replace(self, last_completed=None, scheduled_start=None, reason="")
+        return replace(
+            self, last_completed=None, due_date=on + step, scheduled_start=None, reason=""
+        )
 
 
 @dataclass
@@ -117,6 +118,17 @@ class Owner:
     def get_all_tasks(self) -> list[Task]:
         """Return every task across all of the owner's pets."""
         return [task for pet in self.pets for task in pet.tasks]
+
+
+def _slot_start(task: Task) -> Optional[time]:
+    """Return the time a task occupies: its scheduled start, else its preferred time."""
+    return task.scheduled_start if task.scheduled_start is not None else task.preferred_time
+
+
+def _span(task: Task) -> tuple[datetime, datetime]:
+    """Return the (start, end) datetimes a timed task occupies."""
+    start = _dt(_slot_start(task))
+    return start, start + timedelta(minutes=task.duration_minutes)
 
 
 class Scheduler:
@@ -188,21 +200,85 @@ class Scheduler:
             ),
         )
 
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Order tasks by the time they occupy (scheduled start, else preferred time); untimed last.
+
+        Keys are `datetime.time` objects, which compare chronologically, so no string
+        parsing is needed. (Zero-padded "HH:MM" strings would also sort correctly.)
+        """
+        return sorted(
+            tasks, key=lambda t: (_slot_start(t) is None, _slot_start(t) or time.min)
+        )
+
+    def filter_tasks(
+        self,
+        tasks: Optional[list[Task]] = None,
+        pet_name: Optional[str] = None,
+        completed: Optional[bool] = None,
+    ) -> list[Task]:
+        """Filter tasks (default: all the owner's) by pet name and/or completion status.
+
+        A criterion left as None is ignored, so the filters can be combined freely.
+        """
+        if tasks is None:
+            tasks = self.owner.get_all_tasks()
+        return [
+            t
+            for t in tasks
+            if (pet_name is None or t.pet_name == pet_name)
+            and (completed is None or (t.last_completed is not None) == completed)
+        ]
+
+    def mark_task_complete(self, task: Task, on: date) -> Optional[Task]:
+        """Complete a task and, if it recurs, add its next occurrence to the same pet.
+
+        Returns the newly created task, or None for a one-off task.
+        """
+        task.mark_complete(on)
+        following = task.next_occurrence(on)
+        if following is not None:
+            for pet in self.owner.pets:
+                if task in pet.tasks:  # Task uses identity equality, so this is exact
+                    pet.add_task(following)
+                    break
+        return following
+
+    def conflict_warnings(self, on: date, tasks: Optional[list[Task]] = None) -> list[str]:
+        """Return a warning message for each pair of timed tasks whose windows overlap.
+
+        Covers tasks for the same pet and for different pets (default: every task
+        due on `on`). Never raises; an empty list means no conflicts.
+        """
+        if tasks is None:
+            tasks = [t for t in self.owner.get_all_tasks() if t.is_due(on)]
+        warnings = []
+        for a, b in self._overlapping_pairs(tasks):
+            (a_start, a_end), (b_start, b_end) = _span(a), _span(b)
+            who = "same pet" if a.pet_name == b.pet_name else "different pets"
+            warnings.append(
+                f"Warning: '{a.title}' ({a.pet_name}, {_fmt(a_start)}-{_fmt(a_end)}) overlaps "
+                f"'{b.title}' ({b.pet_name}, {_fmt(b_start)}-{_fmt(b_end)}) [{who}]"
+            )
+        return warnings
+
     def detect_conflicts(self) -> list[Task]:
         """Return planned tasks whose time slots overlap."""
-        slots = [
-            (t, _dt(t.scheduled_start), _dt(t.scheduled_start) + timedelta(minutes=t.duration_minutes))
-            for t in self.plan
-            if t.scheduled_start is not None
-        ]
         conflicted: list[Task] = []
-        for i, (task, start, end) in enumerate(slots):
-            for other, o_start, o_end in slots[i + 1:]:
-                if start < o_end and o_start < end:
-                    for t in (task, other):
-                        if t not in conflicted:
-                            conflicted.append(t)
+        for a, b in self._overlapping_pairs(self.plan):
+            for task in (a, b):
+                if task not in conflicted:
+                    conflicted.append(task)
         return conflicted
+
+    @staticmethod
+    def _overlapping_pairs(tasks: list[Task]) -> list[tuple[Task, Task]]:
+        """Return every pair of timed tasks whose time windows overlap."""
+        timed = [t for t in tasks if _slot_start(t) is not None]
+        return [
+            (a, b)
+            for a, b in combinations(timed, 2)
+            if _span(a)[0] < _span(b)[1] and _span(b)[0] < _span(a)[1]
+        ]
 
     def explain_plan(self) -> str:
         """Describe why each task was scheduled or skipped."""

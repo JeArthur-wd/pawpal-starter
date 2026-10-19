@@ -22,6 +22,18 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Features
+
+- **Multi-pet task tracking:** one owner, many pets, each with its own tasks (title, duration, priority, optional preferred time, repeat frequency).
+- **Priority-aware daily planning:** tasks from every pet are combined, and the most important ones get the limited time budget first (`Scheduler.generate_plan`, `Scheduler.sort_tasks`).
+- **Time-budget and day-window limits:** tasks that do not fit the owner's available minutes or the end of the day are skipped, with the reason shown.
+- **Sorting by time:** tasks listed in chronological order, untimed tasks last (`Scheduler.sort_by_time`).
+- **Filtering:** view by pet and/or by pending or completed status (`Scheduler.filter_tasks`).
+- **Conflict warnings:** overlapping time windows are flagged in plain language, for the same pet or different pets, without crashing (`Scheduler.conflict_warnings`).
+- **Daily and weekly recurrence:** completing a recurring task automatically adds the next occurrence (+1 day or +7 days), and completing the same task twice never duplicates it (`Scheduler.mark_task_complete`).
+- **Plan explanations:** every planned or skipped task carries a one-sentence reason (`Scheduler.explain_plan`).
+- **Streamlit app and CLI demo:** `streamlit run app.py` for the interactive planner, `python main.py` for a terminal walkthrough.
+
 ## Implementation summary
 
 The logic layer lives in `pawpal_system.py` and is built from four classes plus two enums (`Priority`, `Frequency`). The design is in `diagrams/uml.mmd`.
@@ -178,12 +190,76 @@ tests\test_pawpal.py ..................                                  [100%]
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+Run the interactive app with `streamlit run app.py`, or the terminal demo with `python main.py`.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### What you can do in the app
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+The page has five sections, top to bottom:
+
+1. **About you:** set your name and how many minutes you have for pet care today. This is the time budget the planner respects.
+2. **Your pets:** add pets by name and species. Empty or duplicate names are rejected with a warning.
+3. **Add a task:** choose a pet, then set the task name, duration, priority, how often it repeats (once, daily, weekly) and, optionally, a preferred time.
+4. **Your tasks:** a table sorted by time, with filters for pet and status. Overlapping times appear as yellow warnings under the table. A "Finished a task?" picker marks a task complete, and a daily or weekly task immediately gets its next occurrence.
+5. **Today's schedule:** "Generate schedule" builds the day's plan from every pet's due tasks and shows each task's time slot with the reason it was placed there. Anything that does not fit is listed with why.
+
+### Example workflow
+
+1. Add two pets, Mochi (dog) and Whiskers (cat).
+2. Add a daily "Morning walk" for Mochi at 08:00, a "Give medication" task for Whiskers at 12:30, and a low-priority "Vet check-in call" for Mochi, also at 12:30.
+3. In **Your tasks**, the list is sorted by time, and a warning says the call overlaps the medication (different pets).
+4. Click **Mark complete** on "Morning walk". It shows as done, and a new "Morning walk" appears due tomorrow.
+5. Click **Generate schedule**. The higher-priority medication keeps 12:30 and the call is moved to the next free slot, with the reason in the "Why" column.
+
+### Scheduler behaviors shown
+
+- **Sorting:** `sort_by_time` puts tasks entered out of order into chronological order.
+- **Filtering:** `filter_tasks` limits the list to one pet or to completed or pending tasks.
+- **Conflict warnings:** `conflict_warnings` reports overlapping windows without raising an error.
+- **Recurrence:** `mark_task_complete` creates the next daily or weekly task.
+- **Budgeting:** `generate_plan` skips what does not fit and says why.
+
+### Sample CLI output
+
+Excerpt from `python main.py` (the full output is in the Sample Output section above):
+
+```
+Today's Schedule for Jordan - Monday, October 19, 2026
+==================================================================
+Time         Task              Pet       Priority   Min
+------------------------------------------------------------------
+08:00-08:30  Morning walk      Mochi     high        30
+08:30-08:40  Breakfast         Whiskers  high        10
+08:40-09:00  Play session      Whiskers  medium      20
+12:30-12:35  Give medication   Whiskers  high         5
+18:00-18:25  Evening walk      Mochi     medium      25
+------------------------------------------------------------------
+Planned 90 of 100 available minutes.
+
+Skipped:
+  Grooming (Mochi): needs 45 min but only 10 min of the time budget is left.
+
+=== Sorting: Scheduler.sort_by_time() ===
+  07:30  Morning walk (Mochi)
+  07:40  Brush teeth (Mochi)
+  08:30  Breakfast (Whiskers)
+  12:30  Vet check-in call (Mochi)
+  12:30  Give medication (Whiskers)
+  16:00  Bath (Whiskers)
+  18:00  Evening walk (Mochi)
+  --:--  Play session (Whiskers)
+
+=== Conflict detection: Scheduler.conflict_warnings() ===
+  Warning: 'Morning walk' (Mochi, 07:30-08:00) overlaps 'Brush teeth' (Mochi, 07:40-07:45) [same pet]
+  Warning: 'Vet check-in call' (Mochi, 12:30-12:45) overlaps 'Give medication' (Whiskers, 12:30-12:35) [different pets]
+
+=== Recurring tasks: Scheduler.mark_task_complete() ===
+  Completed 'Morning walk' (daily) -> next due 2026-10-20
+  Completed 'Bath' (weekly) -> next due 2026-10-26
+  Completed 'Give medication' (once) -> no next occurrence
+```
+
+*No screenshot is included; the walkthrough and CLI output above describe the app's behavior.*
+
+### Design files
+
+The class diagram is in [`diagrams/uml_final.mmd`](diagrams/uml_final.mmd) (Mermaid). `diagrams/uml.mmd` holds the same diagram.

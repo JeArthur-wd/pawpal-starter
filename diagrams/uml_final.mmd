@@ -1,0 +1,72 @@
+classDiagram
+    class Owner {
+        +str name
+        +int available_minutes
+        +time day_start
+        +time day_end
+        +dict preferences
+        +list~Pet~ pets
+        +add_pet(pet) void
+        +get_all_tasks() list~Task~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +list~Task~ tasks
+        +add_task(task) void
+        +get_pending_tasks(on) list~Task~
+    }
+
+    class Task {
+        +str title
+        +int duration_minutes
+        +Priority priority
+        +time preferred_time
+        +Frequency frequency
+        +date last_completed
+        +date due_date
+        +str pet_name
+        +time scheduled_start
+        +str reason
+        +mark_complete(on) void
+        +is_due(date) bool
+        +priority_value() int
+        +next_occurrence(on) Task
+    }
+
+    class Scheduler {
+        +Owner owner
+        +list~Task~ plan
+        +list~Task~ skipped
+        +generate_plan(date) list~Task~
+        +sort_tasks(tasks) list~Task~
+        +sort_by_time(tasks) list~Task~
+        +filter_tasks(tasks, pet_name, completed) list~Task~
+        +mark_task_complete(task, on) Task
+        +conflict_warnings(on, tasks) list~str~
+        +detect_conflicts() list~Task~
+        +explain_plan() str
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+    }
+
+    Owner "1" *-- "0..*" Pet : owns
+    Pet "1" *-- "0..*" Task : has
+    Scheduler "1" --> "1" Owner : plans for
+    Scheduler ..> Task : orders and schedules
+    Scheduler ..> Pet : adds recurring copies to
+    Task ..> Priority : uses
+    Task ..> Frequency : uses

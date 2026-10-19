@@ -67,5 +67,6 @@ classDiagram
     Pet "1" *-- "0..*" Task : has
     Scheduler "1" --> "1" Owner : plans for
     Scheduler ..> Task : orders and schedules
+    Scheduler ..> Pet : adds recurring copies to
     Task ..> Priority : uses
     Task ..> Frequency : uses

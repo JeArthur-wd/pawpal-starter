@@ -22,6 +22,17 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Implementation summary
+
+The logic layer lives in `pawpal_system.py` and is built from four classes plus two enums (`Priority`, `Frequency`). The design is in `diagrams/uml.mmd`.
+
+- **`Task`** (dataclass) is one care activity: title, duration, priority, optional preferred time, frequency and the date it was last completed. `is_due(date)` uses frequency and `last_completed` to decide whether it belongs in a given day's plan.
+- **`Pet`** (dataclass) holds a name, species and its list of tasks. `add_task` also stamps the task with the pet's name so the plan can say who it is for.
+- **`Owner`** (dataclass) holds the constraints (time budget, day window, preferences) and a list of pets. `get_all_tasks()` returns every pet's tasks in one flat list.
+- **`Scheduler`** is the planning logic. `generate_plan(date)` reads from `Owner.get_all_tasks()`, keeps the tasks that are due, sorts them by priority, then preferred time, then shortest first, and places each in the earliest free slot at or after its preferred time. Tasks that don't fit the time budget or the day window are skipped, and every task records a `reason`. `detect_conflicts()` finds overlapping slots and `explain_plan()` turns the reasons into text.
+
+The data flow is `Owner` -> `Pet`s -> `Task`s -> `Scheduler` -> an ordered plan with reasons. `main.py` is a terminal demo of that flow, and `tests/test_pawpal.py` holds the first automated tests.
+
 ## Getting started
 
 ### Setup
@@ -44,14 +55,30 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Output of `python main.py`, which builds one owner with two pets and six tasks and prints the generated plan:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+Today's Schedule for Jordan - Monday, October 19, 2026
+==================================================================
+Time         Task              Pet       Priority   Min
+------------------------------------------------------------------
+08:00-08:30  Morning walk      Mochi     high        30
+08:30-08:40  Breakfast         Whiskers  high        10
+08:40-09:00  Play session      Whiskers  medium      20
+12:30-12:35  Give medication   Whiskers  high         5
+18:00-18:25  Evening walk      Mochi     medium      25
+------------------------------------------------------------------
+Planned 90 of 100 available minutes.
+
+Skipped:
+  Grooming (Mochi): needs 45 min but only 10 min of the time budget is left.
+
+Why this plan:
+  Morning walk (Mochi): high priority, preferred 07:30 is before the day starts at 08:00, so it starts then.
+  Breakfast (Whiskers): high priority, preferred 08:00 was already taken, moved to the next free slot.
+  Play session (Whiskers): medium priority, placed in the first free slot.
+  Give medication (Whiskers): high priority, scheduled at its preferred time.
+  Evening walk (Mochi): medium priority, scheduled at its preferred time.
 ```
 
 ## 🧪 Testing PawPal+
